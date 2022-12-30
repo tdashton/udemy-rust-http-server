@@ -1,28 +1,38 @@
 use super::method::{Method, MethodError};
-use super::{QueryString};
+use super::{Header, QueryString};
 use std::convert::TryFrom;
 use std::error::Error;
-use std::fmt::{Display, Debug, Result as FmtResult, Formatter};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::str;
 use std::str::Utf8Error;
 
 #[derive(Debug)]
 pub struct Request<'buf> {
+    // header: Option<Header<'buf>>,
     path: &'buf str,
     method: Method,
+    headers: Option<Header<'buf>>,
     query_string: Option<QueryString<'buf>>,
 }
 
 impl<'buf> Request<'buf> {
-    pub fn path(& self) -> &str {
+    // pub fn header(&self) -> Option<&Header> {
+    //     return self.header.as_ref();
+    // }
+
+    pub fn path(&self) -> &str {
         &self.path
     }
 
-    pub fn method(& self) -> &Method {
+    pub fn method(&self) -> &Method {
         &self.method
     }
 
-    pub fn query_string(& self) -> Option<&QueryString> {
+    pub fn headers(&self) -> Option<&Header> {
+        self.headers.as_ref()
+    }
+
+    pub fn query_string(&self) -> Option<&QueryString> {
         self.query_string.as_ref()
     }
 }
@@ -59,6 +69,7 @@ impl<'buf> TryFrom<&'buf [u8]> for Request<'buf> {
         let (method, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
         let (mut path, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
         let (protocol, request) = get_next_word(request).ok_or(ParseError::InvalidRequest)?;
+        let (header, request) = get_until_blank_line(request).ok_or(ParseError::InvalidRequest)?; //map
 
         if protocol != "HTTP/1.1" {
             return Err(ParseError::InvalidProtocol);
@@ -66,7 +77,7 @@ impl<'buf> TryFrom<&'buf [u8]> for Request<'buf> {
 
         // this calls the from_str on the Method
         // the ? will convert the possible returned MethodError using the impl From<MethodError> for ParseError {
-        let method: Method = method.parse()?; 
+        let method: Method = method.parse()?;
 
         // let mut query_string = None;
         // match path.find('?') {
@@ -88,17 +99,22 @@ impl<'buf> TryFrom<&'buf [u8]> for Request<'buf> {
         // this replaces the two "Some" variants above
         let mut query_string = None;
         if let Some(i) = path.find('?') {
-            query_string = Some(QueryString::from(&path[i+1..]));
+            query_string = Some(QueryString::from(&path[i + 1..]));
             path = &path[..i];
+        }
+
+        let mut headers = None;
+        if header.len() != 0 {
+            headers = Some(Header::from(header));
         }
 
         Ok(Self {
             path,
+            method,
+            headers,
             query_string,
-            method
         })
     }
-
 }
 
 // find the first word, pass the rest of the string and do the same thing
@@ -106,14 +122,22 @@ fn get_next_word(request: &str) -> Option<(&str, &str)> {
     for (i, c) in request.chars().enumerate() {
         if c == ' ' || c == '\r' {
             // i+1 is ok here b/c we know there is a space here
-            return Some((&request[..i], &request[i+1..]))
+            return Some((&request[..i], &request[i + 1..]));
         }
-
-
     }
-    unimplemented!();
+
+    None
 }
 
+// find the first word, pass the rest of the string and do the same thing
+fn get_until_blank_line(request: &str) -> Option<(&str, &str)> {
+    match request.find("\r\n\r\n") {
+        Some(i) => {
+            return Some((&request[1..i], &request[i + 4..]));
+        }
+        _ => return None,
+    }
+}
 
 pub enum ParseError {
     InvalidRequest,

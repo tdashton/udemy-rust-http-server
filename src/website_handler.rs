@@ -1,4 +1,4 @@
-use crate::http::{Response, Request, StatusCode, Method};
+use crate::http::{Method, Request, Response, StatusCode};
 use std::{fs, path};
 
 use super::server::Handler;
@@ -21,7 +21,7 @@ impl WebsiteHandler {
                 }
                 println!("Directory traversal attack detected: {}", file_path);
                 None
-            },
+            }
             Err(_) => None,
         }
     }
@@ -37,7 +37,7 @@ impl Handler for WebsiteHandler {
                     Some(contents) => Response::new(StatusCode::Ok, Some(contents)),
                     None => Response::new(StatusCode::NotFound, None),
                 },
-            }
+            },
             _ => Response::new(StatusCode::NotFound, None),
         }
     }
